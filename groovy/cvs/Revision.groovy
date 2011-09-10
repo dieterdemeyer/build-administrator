@@ -1,0 +1,3 @@
+enum Revision {
+        TAG, BRANCH
+}

@@ -1,0 +1,169 @@
+<project name="SVN Macros" basedir=".." xmlns:svn="jwaresoftware.svn4ant.client">
+
+    <property environment="env"/>
+
+    <dirname property="current.basedir" file="${ant.file.svn}"/>
+    <property file="${current.basedir}/config/svn.properties"/>
+
+    <property name="app.name.kernel" value="VentourisKernel"/>
+    <property name="app.name.ss" value="VentourisGen"/>
+    <property name="app.name.venn" value="VentourisVenn"/>
+    <property name="app.name.kb" value="VentourisKB"/>
+    <property name="app.name.om" value="VentourisOverkoepelend"/>
+    <property name="app.name.simba" value="Simba"/>
+    <property name="app.name.eloket" value="ELoketFlex"/>
+    <property name="app.name.modules" value="VentourisModules"/>
+    <property name="app.name.ventourisbuild" value="VentourisBuild"/>
+
+    <property name="svn4ant.install" value="${basedir}/lib/svn4ant_3.0.0b1-build1091.8"/>
+
+    <taskdef uri="jwaresoftware.svn4ant.client" resource="org/jwaresoftware/svn4ant/client/antlib.xml">
+        <classpath>
+            <fileset dir="${svn4ant.install}/dep">
+                <include name="*/lib/*.jar"/>
+            </fileset>
+            <fileset dir="${svn4ant.install}/lib">
+                <include name="jw-svn4ant.jar"/>
+            </fileset>
+        </classpath>
+    </taskdef>
+
+    <svn:server id="svn.repo" authcache="no">
+        <url value="${svn.url}"/>
+        <credential username="${svn.user}" password="${svn.password}"/>
+    </svn:server>
+
+    <macrodef name="svn-checkout">
+        <attribute name="repository"/>
+        <attribute name="module" default=""/>
+        <attribute name="dest" default="${working.dir}"/>
+        <attribute name="revision" default=""/>
+        <attribute name="tag" default=""/>
+        <attribute name="haltiferror" default="true"/>
+        <attribute name="recurse" default="true"/>
+        <attribute name="credential" default="svn.repo"/>
+        <sequential>
+            <var name="__repository" value="@{repository}"/>
+            <var name="__module" value="@{module}"/>
+            <var name="__dest" value="@{dest}"/>
+            <var name="__revision" value="@{revision}"/>
+            <var name="__tag" value="@{tag}"/>
+
+            <groovy><![CDATA[
+                 def repository = properties['__repository']
+                 def module = properties['__module']
+                 def dest = properties['__dest']
+                 def revision = properties['__revision']
+                 def tag = properties['__tag']
+
+                 def from
+                 if (tag == null || tag.isEmpty()) {
+                     from = repository + '/trunk/' + module
+                 } else {
+                     from = repository + '/branches/' + tag + '/' + module
+                 }
+
+                 def to = dest + '/' + repository + '/' + module
+
+                 if (revision == null || revision.isEmpty()) {
+                     revision = 'HEAD'
+                 }
+
+                 println "SVN checkout module: '" + from + "' revision: '" + revision + "'" + (tag == null || tag.isEmpty() ? "" : " tag: '" + tag + "'")
+
+                 ant.var(name: 'from__', value: from)
+                 ant.var(name: 'to__', value: to)
+                 ant.var(name: 'revision__', value: revision)
+            ]]></groovy>
+
+            <svn:checkout credential="@{credential}" from="${from__}" to="${to__}" revision="${revision__}"
+                          haltiferror="@{haltiferror}" recurse="@{recurse}"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="svn-update">
+        <attribute name="dest"/>
+        <sequential>
+            <svn:update credential="svn.repo" path="@{dest}"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="svn-export">
+        <attribute name="module"/>
+        <attribute name="revision"/>
+        <attribute name="haltiferror" default="true"/>
+
+        <sequential>
+            <echo message="SVN export module: '@{module}'  revision: '@{revision}'"/>
+            <svn:export credential="svn.repo" from="${app.name.ss}/trunk/@{module}"
+                        to="${working.dir}/${app.name.ss}/@{module}" revision="@{revision}"
+                        haltiferror="@{haltiferror}"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="svn-export-tag">
+        <attribute name="tag"/>
+        <attribute name="module"/>
+        <attribute name="workingDir"/>
+        <attribute name="credential" default="svn.repo"/>
+        <attribute name="haltiferror" default="true"/>
+
+        <sequential>
+            <echo message="SVN export module: '@{module}'  tag: '@{tag}'"/>
+            <echo message="SVN export dir: @{workingDir}/@{module}"/>
+            <svn:export credential="@{credential}" from="@{module}/branches/@{tag}" to="@{workingDir}/@{module}"
+                        haltiferror="@{haltiferror}"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="svn-commit">
+        <attribute name="dest"/>
+        <attribute name="message"/>
+        <attribute name="credential" default="svn.repo"/>
+        <sequential>
+            <svn:commit credential="@{credential}" path="@{dest}" message="@{message}" addlocals="true"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="svn-fetch-revision">
+        <attribute name="module"/>
+        <attribute name="property"/>
+
+        <sequential>
+            <svn:revget credential="svn.repo" url="${svn.url}/@{module}" revisionproperty="@{property}"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="svn-tag-module">
+        <attribute name="module"/>
+        <attribute name="tag"/>
+        <attribute name="message"/>
+        <sequential>
+            <svn:copy fromurl="${svn.url}/@{module}/trunk" tourl="${svn.url}/@{module}/branches/@{tag}"
+                      message="@{message}"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="svn-get-property">
+        <attribute name="localdir"/>
+        <attribute name="property"/>
+        <attribute name="toproperty"/>
+        <sequential>
+            <svn:prop credential="svn.repo" action="get" toproperty="@{toproperty}" strict="true" path="@{localdir}">
+                <property name="@{property}"/>
+            </svn:prop>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="svn-set-property">
+        <attribute name="localdir"/>
+        <attribute name="property"/>
+        <attribute name="value"/>
+        <sequential>
+            <svn:prop credential="svn.repo" action="set" strict="true" path="@{localdir}">
+                <property name="@{property}" value="@{value}"/>
+            </svn:prop>
+        </sequential>
+    </macrodef>
+
+</project>

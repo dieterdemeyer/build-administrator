@@ -1,0 +1,17 @@
+<project name="Build Administration" basedir="..">
+
+    <property environment="env"/>
+
+    <target name="prepare-baseline" description="Perform all steps required to prepare baselining">
+        <ant antfile="ant/jenkins.xml" target="-disable-jenkins-jobs"/>
+    </target>
+
+    <target name="wrapup-baseline" description="Perform all wrapup steps after baselining">
+        <ant antfile="ant/jenkins.xml" target="-enable-jenkins-jobs"/>
+    </target>
+
+    <target name="list-of-failed-jobs" description="Fetch a list of failed Jenkins Jobs">
+        <ant antfile="ant/jenkins.xml" target="-list-of-failed-jobs"/>
+    </target>
+
+</project>

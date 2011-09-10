@@ -1,0 +1,154 @@
+<project name="Jenkins Macros" basedir="..">
+
+    <property file="${basedir}/config/jenkins.properties"/>
+
+    <taskdef name="groovy" classname="org.codehaus.groovy.ant.Groovy">
+        <classpath>
+            <pathelement location="${basedir}/lib/antlr-2.7.7.jar"/>
+            <pathelement location="${basedir}/lib/asm-3.2.jar"/>
+            <pathelement location="${basedir}/lib/groovy-1.8.2.jar"/>
+            <pathelement location="${basedir}/lib/commons-codec-1.3.jar"/>
+            <pathelement location="${basedir}/lib/httpclient-4.1.1.jar"/>
+            <pathelement location="${basedir}/lib/httpcore-4.1.jar"/>
+            <pathelement location="${basedir}/lib/commons-logging-1.1.1.jar"/>
+        </classpath>
+    </taskdef>
+
+    <macrodef name="jenkins-cli">
+        <attribute name="server" default="${jenkins.master.server}"/>
+        <attribute name="port" default="${jenkins.master.port}"/>
+        <attribute name="useSecurity" default="false"/>
+        <attribute name="username" default=""/>
+        <attribute name="password" default=""/>
+        <attribute name="command"/>
+        <attribute name="arguments" default=""/>
+        <attribute name="options" default=""/>
+        <sequential>
+            <groovy><![CDATA[
+
+                def argumentLine = '/c java -jar ' + properties['basedir'] + '/lib/jenkins-cli.jar -s http://@{server}:@{port} @{command}'
+
+                if(!''.equals('@{arguments}')) {
+                    argumentLine += ' @{arguments}'
+                }
+
+                if(!''.equals('@{options}')) {
+                    argumentLine += ' @{options}'
+                }
+
+                if('true'.equalsIgnoreCase('@{useSecurity}')) {
+                    if(''.equals('@{username}') || ''.equals('@{password}')) {
+                        ant.fail(message: "Username and password must be specified if useSecurity attribute is true !")
+                    }
+                    argumentLine += '--username @{username} --password @{password}'
+                }
+
+                println 'Executing cmd with arguments ' + argumentLine
+                ant.exec(outputproperty: "cmdOut", errorproperty: "cmdErr", resultproperty: "cmdExit", executable: 'cmd') {
+                             arg(line: argumentLine)
+                }
+
+                println "return code:  ${ant.project.properties.cmdExit}"
+                println "stderr:       ${ant.project.properties.cmdErr}"
+                println "stdout:       ${ ant.project.properties.cmdOut}"
+                
+            ]]></groovy>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="jenkins-fetch">
+        <attribute name="server" default="${jenkins.master.server}"/>
+        <attribute name="port" default="${jenkins.master.port}"/>
+        <attribute name="job"/>
+        <attribute name="build"/>
+        <attribute name="artifactdir"/>
+        <attribute name="artifactname"/>
+        <attribute name="destdir"/>
+        <sequential>
+            <get src="http://@{server}:@{port}/job/@{job}/@{build}/artifact/@{artifactdir}/@{artifactname}"
+                 dest="@{destdir}/@{artifactname}"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="jenkins-fetch-recent-builds">
+        <attribute name="server" default="${jenkins.master.server}"/>
+        <attribute name="port" default="${jenkins.master.port}"/>
+        <attribute name="job"/>
+        <attribute name="addproperty"/>
+        <sequential>
+            <get src="http://@{server}:@{port}/job/@{job}/api/xml?xpath=concat('@{addproperty}=',//build[1]/number/text(),',',//build[2]/number/text(),',',//build[3]/number/text(),',',//build[4]/number/text())"
+                 dest="./jenkins-@{job}-builds.properties"/>
+            <property file="./jenkins-@{job}-builds.properties"/>
+            <delete file="./jenkins-@{job}-builds.properties" quiet="true"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="jenkins-load-properties">
+        <attribute name="job"/>
+        <attribute name="build"/>
+        <attribute name="artifactname"/>
+        <attribute name="property-prefix"/>
+        <attribute name="artifactdir" default="."/>
+        <attribute name="destdir" default="."/>
+        <sequential>
+            <jenkins-fetch job="@{job}" build="@{build}" artifactdir="@{artifactdir}" artifactname="@{artifactname}"
+                           destdir="@{destdir}"/>
+            <property file="@{destdir}/@{artifactname}" prefix="@{property-prefix}"/>
+            <delete file="@{destdir}/@{artifactname}" quiet="true"/>
+        </sequential>
+    </macrodef>
+
+    <macrodef name="http-post">
+        <attribute name="url"/>
+        <attribute name="useSecurity" default="false"/>
+        <attribute name="username" default=""/>
+        <attribute name="password" default=""/>
+        <attribute name="failonerror" default="true"/>
+        <sequential>
+            <groovy><![CDATA[
+                import org.apache.http.HttpHost
+                import org.apache.http.client.methods.HttpPost
+                import org.apache.http.client.AuthCache
+                import org.apache.http.client.protocol.ClientContext
+                import org.apache.http.impl.auth.BasicScheme
+                import org.apache.http.impl.client.BasicAuthCache
+                import org.apache.http.impl.client.DefaultHttpClient
+
+                import org.apache.http.auth.*
+                import org.apache.http.protocol.*
+
+                def server = new URL('@{url}').getHost()
+                def client = new DefaultHttpClient()
+                client.credentialsProvider.setCredentials(
+                   new AuthScope(server, 80, "realm"),
+                   new UsernamePasswordCredentials('@{username}', '@{password}')
+                )
+
+                HttpHost targetHost = new HttpHost(server, 80, "http")
+
+                AuthCache authCache = new BasicAuthCache()
+                BasicScheme basicAuth = new BasicScheme()
+                authCache.put(targetHost, basicAuth)
+
+                BasicHttpContext localcontext = new BasicHttpContext()
+                localcontext.setAttribute(ClientContext.AUTH_CACHE, authCache)
+
+                def post = new HttpPost( '@{url}' )
+
+                try {
+                  def response = client.execute(targetHost, post, localcontext);
+                  int result = response.getStatusLine().getStatusCode()
+
+                  if (result >= 400 && 'true'.equalsIgnoreCase('@{failonerror}')) {
+                    ant.fail("HTTP POST to @{url} failed. HTTP response is ${result}")
+                  } else {
+                    ant.echo("HTTP POST to @{url} succeeded. HTTP response is ${result}")
+                  }
+                } finally {
+                  client.getConnectionManager().shutdown()
+                }
+            ]]></groovy>
+        </sequential>
+    </macrodef>
+
+</project>

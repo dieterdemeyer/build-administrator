@@ -1,0 +1,26 @@
+<project name="Jenkins" default="fail" basedir="..">
+
+    <import file="${basedir}/ant/jenkins-macros.xml"/>
+
+    <target name="fail">
+        <fail><![CDATA[
+Do not use this build file directly.
+Targets are defined in build.xml]]>
+        </fail>
+    </target>
+
+    <target name="-disable-jenkins-jobs">
+        <jenkins-cli command="disable-job" arguments="Test"/>
+        <!--<jenkins-cli command="disable-job" arguments="JenkinsJobTwo"/>-->
+    </target>
+
+    <target name="-enable-jenkins-jobs">
+        <jenkins-cli command="enable-job" arguments="JenkinsJobOne"/>
+        <jenkins-cli command="enable-job" arguments="JenkinsJobTwo"/>
+    </target>
+
+    <target name="-list-of-failed-jobs">
+        <jenkins-cli command="groovy" arguments="${basedir}/groovy/jenkins/ListOfFailedJobs.groovy" />
+    </target>
+
+</project>

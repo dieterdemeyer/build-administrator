@@ -1,0 +1,11 @@
+<project name="Global Macros" basedir="..">
+
+    <macrodef name="purge-file">
+        <attribute name="file"/>
+        <sequential>
+            <delete file="@{file}"/>
+            <touch file="@{file}"/>
+        </sequential>
+    </macrodef>
+
+</project>
